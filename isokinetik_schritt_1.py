@@ -2,12 +2,12 @@ import pandas as pd
 from scipy.signal import find_peaks
 import os
 import numpy as np
-from openpyxl import load_workbook
 import traceback
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter.scrolledtext import ScrolledText
-import sys
+
+
 
 # Funktion, die find_neighboring_peak unverändert lässt
 def find_neighboring_peak(data, peak_index, direction="left", peak_type="max", prominence_threshold=50):
@@ -58,23 +58,15 @@ def find_neighboring_peak(data, peak_index, direction="left", peak_type="max", p
     return None  # Wenn kein Peak gefunden wurde
 
 
-# Umleitung der print-Ausgabe zur Anzeige in der GUI
-class RedirectOutput:
-    def __init__(self, text_widget):
-        self.text_widget = text_widget
-
-    def write(self, string):
-        self.text_widget.insert(tk.END, string)
-        self.text_widget.see(tk.END)
-
-    def flush(self):
-        pass
+# Hilfsfunktion zur Ausgabe in das Text-Widget
+def output_to_widget(text_widget, message):
+    text_widget.insert(tk.END, message + "\n")
+    text_widget.see(tk.END)
+    text_widget.update_idletasks()  # Aktualisiert das Textfeld sofort
 
 def process_files(folder_path, text_widget):
     results = []
 
-    # Ersetzen der Standardausgabe mit unserer Redirect-Klasse für die GUI
-    sys.stdout = RedirectOutput(text_widget)
     try:
         file_list = os.listdir(folder_path)
         excel_files = [f for f in file_list if f.endswith('.xlsx')]
@@ -119,8 +111,8 @@ def process_files(folder_path, text_widget):
 
                 # Überprüfung der gefundenen Peaks
                 if len(peaks_links) != 8 or len(peaks_rechts) != 8:
-                    print(
-                        f"In Datei {file_name}: Die Hochpunkte sind nicht wie erwartet. Manuelle Nachbearbeitung erforderlich!")
+                    output_to_widget(text_widget, f"In Datei {file_name}: Die Hochpunkte sind nicht wie erwartet. Manuelle Nachbearbeitung erforderlich!" )
+
                     # Speichern der Ergebnisse in einem Dictionary
                     result = {
                         'Dateiname': file_name,
@@ -304,11 +296,7 @@ def process_files(folder_path, text_widget):
                     'Max Extension links': max_extension_links,
                     'Max Extension rechts': max_extension_rechts,
                     'Max Flexion links': max_flexion_links,
-                    # 'IndexExtensionLinks': index_extension_links,
-                    # 'IndexFlexionLinks': index_flexion_links,
                     'Max Flexion rechts': max_flexion_rechts,
-                    # 'IndexExtensionRechts': index_extension_rechts,
-                    # 'IndexFlexionRechts': index_flexion_rechts,
                     'Seitenunterschied Extension absolut': seitenunterschied_extension_absolut,
                     'Seitenunterschied Extension relativ': seitenunterschied_extension_relativ,
                     'Seitenunterschied Flexion absolut': seitenunterschied_flexion_absolut,
@@ -319,10 +307,8 @@ def process_files(folder_path, text_widget):
                     'Unterschied Extension Flexion rechts': unterschied_extension_flexion_rechts,
                     'Winkel maximales Drehmoment links Extension': max_extension_links_winkel,
                     'Winkel maximales Drehmoment rechts Extension': max_extension_rechts_winkel,
-                    # Winkel der Extension rechts
-                    'Winkel maximales Drehmoment links Flexion': max_flexion_links_winkel,  # Winkel der Flexion links
+                    'Winkel maximales Drehmoment links Flexion': max_flexion_links_winkel,
                     'Winkel maximales Drehmoment rechts Flexion': max_flexion_rechts_winkel,
-                    # Winkel der Flexion rechts
                     'ROM Extension links': rom_extension_links,
                     'ROM Extension rechts': rom_extension_rechts,
                     'ROM Flexion links': rom_flexion_links,
@@ -333,21 +319,36 @@ def process_files(folder_path, text_widget):
                 results.append(result)
 
             except Exception as e:
-                print(f"Fehler bei Datei {file_name}: {e}")
+                output_to_widget(text_widget, f"Fehler bei Datei {file_name}: {e}")
                 traceback.print_exc()
 
         # Speichern der Ergebnisse in einer Excel-Datei
         results_df = pd.DataFrame(results)
         output_file_path = os.path.join(folder_path, 'Ergebnisse_isokinetisch.xlsx')
         results_df.to_excel(output_file_path, index=False)
-        print(f"Die Ergebnisse wurden erfolgreich in {output_file_path} gespeichert.")
+        # Festlegen der Spaltenbreite
+        with pd.ExcelWriter(output_file_path, engine='openpyxl', mode='a') as writer:
+            workbook = writer.book
+            worksheet = workbook.active
+
+            for col in worksheet.columns:
+                # Setze die Breite der aktuellen Spalte auf 20
+                worksheet.column_dimensions[col[0].column_letter].width = 20
+        output_to_widget(text_widget, f"Die Ergebnisse wurden erfolgreich in {output_file_path} gespeichert.")
 
     except Exception as e:
-        print(f"Allgemeiner Fehler: {e}")
+        output_to_widget(text_widget, f"Allgemeiner Fehler: {e}")
         traceback.print_exc()
 
     finally:
-        sys.stdout = sys.__stdout__  # Rückkehr zur Standardausgabe
+        # Prüfen, ob die Datei erstellt wurde, und eine Erfolgsmeldung anzeigen
+        if os.path.exists(output_file_path):
+            messagebox.showinfo(
+                "Erfolg",
+                f"Die Ergebnistabelle wurde erfolgreich erstellt und ist gespeichert unter {output_file_path}"
+            )
+        else:
+            output_to_widget(text_widget, "Die Ergebnistabelle konnte nicht erstellt werden.")
 
 # GUI-Setup
 def select_folder(entry):
@@ -363,29 +364,36 @@ def start_processing(entry, text_widget):
     text_widget.delete(1.0, tk.END)  # Löscht die Textausgabe
     process_files(folder_path, text_widget)
 
-# Hauptfenster erstellen
-root = tk.Tk()
-root.title("Dateiverarbeitung")
 
-# Eingabefeld für Ordnerpfad
-frame = tk.Frame(root)
-frame.pack(padx=10, pady=10)
+def main():
+    # Hauptfenster erstellen
+    root = tk.Tk()
+    root.title("Isokinetik Datenauswertung Schritt 1")
 
-entry_label = tk.Label(frame, text="Bitte den Ordnerpfad angeben:")
-entry_label.grid(row=0, column=0, sticky="w")
+    # Eingabefeld für Ordnerpfad
+    frame = tk.Frame(root)
+    frame.pack(padx=10, pady=10)
 
-entry = tk.Entry(frame, width=50)
-entry.grid(row=0, column=1)
+    entry_label = tk.Label(frame, text="Bitte den Ordnerpfad angeben:")
+    entry_label.grid(row=0, column=0, sticky="w")
 
-browse_button = tk.Button(frame, text="Durchsuchen", command=lambda: select_folder(entry))
-browse_button.grid(row=0, column=2, padx=5)
+    # Einstellen der Breite des Eingabefeldes
+    entry = tk.Entry(frame, width=70)
+    entry.grid(row=0, column=1)
 
-# Start-Button
-start_button = tk.Button(frame, text="Start", command=lambda: start_processing(entry, text_output))
-start_button.grid(row=1, column=1, pady=10)
+    browse_button = tk.Button(frame, text="Durchsuchen", command=lambda: select_folder(entry))
+    browse_button.grid(row=0, column=2, padx=5)
 
-# Text-Widget für die Ausgaben
-text_output = ScrolledText(root, height=20, width=80)
-text_output.pack(padx=10, pady=10)
+    # Start-Button
+    start_button = tk.Button(frame, text="Start", command=lambda: start_processing(entry, text_output))
+    start_button.grid(row=1, column=1, pady=10)
 
-root.mainloop()
+    # Text-Widget für die Ausgaben
+    text_output = ScrolledText(root, height=20, width=100)
+    text_output.pack(padx=10, pady=10)
+
+    root.mainloop()
+
+# Hauptprogramm starten
+if __name__ == "__main__":
+    main()
