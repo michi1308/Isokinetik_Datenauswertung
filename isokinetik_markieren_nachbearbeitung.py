@@ -67,8 +67,6 @@ def process_excel(file_path):
     finally:
         wb.close()
 
-import tkinter as tk
-from tkinter import filedialog, messagebox
 
 def browse_file(entry):
     # Öffnet ein Dialogfenster, um eine Datei auszuwählen
