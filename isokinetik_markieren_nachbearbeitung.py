@@ -117,3 +117,4 @@ def main():
 # Überprüfe, ob das Skript direkt ausgeführt wird, und starte dann die GUI
 if __name__ == "__main__":
     main()
+
